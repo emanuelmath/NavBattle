@@ -6,6 +6,10 @@ build/
 # === Local configuration ===
 local.properties
 
+# === Logs & OS Files ===
+*.log
+.DS_Store
+
 # === Android Studio ===
 .idea/
 *.iml
@@ -19,6 +23,7 @@ local.properties
 /.idea/assetWizardSettings.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
+misc.xml
 
 # === Native builds ===
 .externalNativeBuild/
@@ -28,10 +33,6 @@ render.experimental.xml
 *.apk
 *.aab
 output-metadata.json
-
-# === Logs & OS Files ===
-*.log
-.DS_Store
 
 # === Testing/Profiling ===
 *.hprof
@@ -43,3 +44,4 @@ captures/
 
 # === Firebase/Google services ===
 google-services.json
+
