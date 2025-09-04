@@ -41,6 +41,9 @@ android {
 
 dependencies {
 
+    // Navigation de pantallas con Jetpack Compose.
+    implementation("androidx.navigation:navigation-compose:2.9.3")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

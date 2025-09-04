@@ -1,5 +1,6 @@
 package com.example.navbattle
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,6 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat.startActivity
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.navbattle.ui.navigation.NavBattleNavHost
+import com.example.navbattle.ui.navigation.Screen
 import com.example.navbattle.ui.theme.NavBattleTheme
 
 class MainActivity : ComponentActivity() {
@@ -29,19 +35,18 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NavBattleTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                val navController = rememberNavController()
+                NavBattleNavHost(
+                    navHostController = navController,
+                    startDestination = Screen.MenuDelJuego.ruta
+                )
             }
         }
     }
 }
 
 @Composable
-fun MenuDelJuego(){
+fun MenuDelJuego(navController: NavController){
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize().padding(50.dp)) {
         Text("NavBattle", fontWeight = FontWeight.ExtraBold)
 
@@ -49,10 +54,14 @@ fun MenuDelJuego(){
 
         Text("Jugar como:")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = {}) {
+            Button(onClick = {
+                navController.navigate(Screen.Servidor.ruta)
+            }) {
                 Text("Servidor")
             }
-            Button(onClick = {}) {
+            Button(onClick = {
+                navController.navigate(Screen.Cliente.ruta)
+            }) {
                 Text("Cliente")
             }
         }
@@ -70,7 +79,8 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun GreetingPreview() {
+    val navController = rememberNavController()
     NavBattleTheme {
-        MenuDelJuego()
+        MenuDelJuego(navController)
     }
 }
