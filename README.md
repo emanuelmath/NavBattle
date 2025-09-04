@@ -18,7 +18,7 @@ El juego es una **batalla de naves 1 vs 1**, inspirado en la dinámica de juegos
 El objetivo es **derrotar al oponente** mediante disparos sincronizados entre dispositivos, cada uno posee 3 vidas y el que le quite todas al otro jugador gana.
 
 
-![Player](https://github.com/user-attachments/assets/64e4df82-c1c8-42dc-b312-70435c0084dc)
+<img src="assets/Player.gif" alt="El player y sus 3 vidas." width="128"/>
 
 ---
 
