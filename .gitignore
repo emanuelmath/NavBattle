@@ -1,0 +1,45 @@
+# === Gradle ===
+.gradle/
+build/
+**/build/
+
+# === Local configuration ===
+local.properties
+
+# === Android Studio ===
+.idea/
+*.iml
+
+# Specific .idea files to ignore
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# === Native builds ===
+.externalNativeBuild/
+.cxx/
+
+# === Output ===
+*.apk
+*.aab
+output-metadata.json
+
+# === Logs & OS Files ===
+*.log
+.DS_Store
+
+# === Testing/Profiling ===
+*.hprof
+captures/
+
+# === Security (Keystore) ===
+*.jks
+*.keystore
+
+# === Firebase/Google services ===
+google-services.json
