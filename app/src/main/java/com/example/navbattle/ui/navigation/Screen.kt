@@ -12,11 +12,13 @@ sealed class Screen(val ruta: String) {
             return "cliente/$nombre"
         }
     }
-    object Juego: Screen("juego/{nombre}/{isServer}") {
-        fun juegoDelUsuario(nombre: String?, isServer: Boolean) : String {
-             return "juego/${nombre ?: "Player"}/${isServer}"
+    object Juego : Screen("juego/{nombre}/{isServer}") {
+        fun juegoDelUsuario(nombre: String?, isServer: Boolean): String {
+            val safeNombre = nombre?.takeIf { it.isNotBlank() } ?: "Player"
+            return "juego/$safeNombre/$isServer"
         }
     }
+
     object GameOver : Screen("gameover")
 
 }

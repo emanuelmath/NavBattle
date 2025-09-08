@@ -1,13 +1,13 @@
 package com.example.navbattle.ui.screens
 
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothSocket
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,32 +16,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.navbattle.bluetooth.BluetoothCliente
 import com.example.navbattle.bluetooth.BluetoothServidor
 import com.example.navbattle.bluetooth.Mensaje
 import com.example.navbattle.ui.navigation.Screen
+
 
 @Composable
 fun EsperarPartida(navController: NavController, nombre: String?) {
     var jugador2 by remember { mutableStateOf<String?>(null) }
     var conectado by remember { mutableStateOf(false) }
-
-    //val context = LocalContext.current
     val adapter = BluetoothAdapter.getDefaultAdapter()
 
-    // Iniciar servidor al entrar.
+    // Iniciar servidor.
     LaunchedEffect(Unit) {
         BluetoothServidor.iniciarServidor(adapter) { socket ->
             conectado = true
 
-            // Escuchar mensajes entrantes.
             BluetoothServidor.escucharMensajes(socket) { mensaje ->
                 when (mensaje.tipo) {
-                    "join" -> jugador2 = mensaje.data
+                    "join" -> {
+                        jugador2 = mensaje.data
+
+                    }
                 }
             }
         }
@@ -61,7 +60,6 @@ fun EsperarPartida(navController: NavController, nombre: String?) {
 
         Button(
             onClick = {
-                // Avisar al cliente que inicie juego.
                 BluetoothServidor.enviarMensaje(Mensaje(tipo = "iniciar", data = "iniciar"))
                 navController.navigate(Screen.Juego.juegoDelUsuario(nombre, true))
             },
@@ -74,7 +72,7 @@ fun EsperarPartida(navController: NavController, nombre: String?) {
 
 @Composable
 fun EsperarPartidaPreview() {
-    var conectado: Boolean = true
+    val conectado: Boolean = true
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize().padding(top = 50.dp)

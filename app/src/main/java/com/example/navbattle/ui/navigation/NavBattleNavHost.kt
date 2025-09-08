@@ -22,6 +22,7 @@ import com.example.navbattle.game.NaveAccelerometerListener
 import com.example.navbattle.ui.navigation.Screen
 import com.example.navbattle.ui.screens.BuscarPartida
 import com.example.navbattle.ui.screens.EsperarPartida
+import com.example.navbattle.ui.screens.GameOver
 import com.example.navbattle.ui.screens.GameScreen
 
 
@@ -47,7 +48,7 @@ fun NavBattleNavHost(navHostController: NavHostController, startDestination: Str
             navArgument("nombre") { type = NavType.StringType },
             navArgument("isServer") {type = NavType.BoolType}
         )) { backStackEntry ->
-            val nombre = backStackEntry.arguments?.getString("nombre") ?: ""
+            val nombre = backStackEntry.arguments?.getString("nombre") ?: "Player"
             val isServer = backStackEntry.arguments?.getBoolean("isServer") ?: true
             val modifier = Modifier
             val gameState = remember {
@@ -73,7 +74,10 @@ fun NavBattleNavHost(navHostController: NavHostController, startDestination: Str
 
             val naveListener = NaveAccelerometerListener(gameState)
 
-            GameScreen(isServer = isServer, navController = navHostController, gameState = gameState, sensorEventListener = naveListener, modifier = modifier)
+            GameScreen(isServer = isServer, navController = navHostController, nombre = nombre, gameState = gameState, sensorEventListener = naveListener, modifier = modifier)
+        }
+        composable(Screen.GameOver.ruta) {
+            GameOver()
         }
     }
 }

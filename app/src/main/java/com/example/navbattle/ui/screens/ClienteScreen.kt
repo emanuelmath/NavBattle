@@ -1,6 +1,7 @@
 package com.example.navbattle.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -9,6 +10,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,12 +33,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.navbattle.bluetooth.BluetoothCliente
 import com.example.navbattle.bluetooth.Mensaje
 import com.example.navbattle.ui.navigation.Screen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 @Composable
 fun BuscarPartida(nombre: String?, navController: NavController) {
@@ -54,17 +64,36 @@ fun BuscarPartida(nombre: String?, navController: NavController) {
         ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
     }
 
+    // Solicitar permisos.
+    LaunchedEffect(Unit) {
+        if (!allPermissionsGranted) {
+            ActivityCompat.requestPermissions(
+                context as Activity,
+                bluetoothPermissions.toTypedArray(),
+                1
+            )
+        }
+    }
+
+    // Descubrir dispositivos.
     DisposableEffect(Unit) {
         if (allPermissionsGranted) {
+            adapter?.bondedDevices?.forEach { device ->
+                if (!devices.contains(device)) {
+                    devices.add(device)
+                }
+            }
+
             val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context?, intent: Intent?) {
-                    val action = intent?.action
-                    if (action == BluetoothDevice.ACTION_FOUND) {
+                    if (intent?.action == BluetoothDevice.ACTION_FOUND) {
                         val device: BluetoothDevice? =
                             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        if (device != null && !devices.contains(device)) {
-                            devices.add(device)
+                        device?.let {
+                            if (!devices.contains(it)) {
+                                devices.add(it)
+                            }
                         }
                     }
                 }
@@ -74,61 +103,77 @@ fun BuscarPartida(nombre: String?, navController: NavController) {
             adapter?.startDiscovery()
 
             onDispose {
-                try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+                try {
+                    context.unregisterReceiver(receiver)
+                } catch (_: Exception) {
+                }
                 adapter?.cancelDiscovery()
             }
         } else {
-            onDispose {  }
+            onDispose { }
         }
     }
 
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(top=20.dp),
+        modifier = Modifier.fillMaxSize().padding(top = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("¡Hola ${nombre ?: "Player"}! Elige una partida:")
         Spacer(Modifier.size(10.dp))
 
         devices.forEach { device ->
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(device.name ?: "Despositivo desconocido")
-                Spacer(Modifier.size(10.dp))
-                Button(
-                    onClick = {
-                        elegido = true
-                        BluetoothCliente.conectar(device) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(device.name ?: "Dispositivo desconocido")
+                    Spacer(Modifier.size(10.dp))
+                    Button(
+                        onClick = {
+                            elegido = true
                             conectado = true
-                            BluetoothCliente.enviarMensaje(
-                                Mensaje(tipo = "join", data = nombre ?: "Player")
-                            )
 
-                            BluetoothCliente.escucharMensajes(it) { mensaje ->
-                                when (mensaje.tipo) {
-                                    "iniciar" -> {
-                                        navController.navigate(
-                                            Screen.Juego.juegoDelUsuario(nombre, false)
-                                        )
+                            BluetoothCliente.conectar(context, adapter, device, nombre ?: "Player") { mensaje ->
+                                if (mensaje.tipo == "iniciar") {
+
+                                    Handler(Looper.getMainLooper()).post {
+                                        navController.navigate(Screen.Juego.juegoDelUsuario(nombre, false)) {
+                                            popUpTo(Screen.Cliente.ruta) { inclusive = true }
+                                        }
                                     }
                                 }
                             }
-                        }
-                    },
-                    enabled = !elegido
-                ) {
-                    Text("Conectar")
+                        },
+                        enabled = !elegido
+                    ) {
+                        Text("Conectar")
+                    }
                 }
+                Spacer(Modifier.size(10.dp))
             }
         }
 
         if (conectado) {
             Text("¡Conectado! Esperando a que el servidor inicie la partida...")
         }
+
+        Spacer(modifier = Modifier.size(10.dp))
+
+        Button(onClick = {
+            adapter?.bondedDevices?.forEach { device ->
+                if (!devices.contains(device)) {
+                    devices.add(device)
+                }
+            }
+        } ) {
+            Text("Refrescar")
+        }
     }
 }
+
+
 
 
 @Composable
@@ -149,27 +194,36 @@ fun BuscarPartidaPreview(nombre: String?) {
         Spacer(Modifier.size(10.dp))
 
         devices.forEach { device ->
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(device.name)//?: "Dispositivo desconocido")
-                Spacer(Modifier.size(10.dp))
-                Button(
-                    onClick = {
-                        elegido = !elegido
-                        conectado = !conectado
-                    },
-                    enabled = !elegido
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Conectar")
+                    Text(device.name)//?: "Dispositivo desconocido")
+                    Spacer(Modifier.size(10.dp))
+                    Button(
+                        onClick = {
+                            elegido = !elegido
+                            conectado = !conectado
+                        },
+                        enabled = !elegido
+                    ) {
+                        Text("Conectar")
+                    }
                 }
+                Spacer(Modifier.size(10.dp))
             }
         }
 
         if (conectado) {
             Text("¡Conectado! Esperando a que el servidor inicie la partida...")
         }
+
+        Button(onClick = {
+        } ) {
+            Text("Refrescar")
+        }
+
     }
 }
 
