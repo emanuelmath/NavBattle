@@ -76,8 +76,13 @@ fun NavBattleNavHost(navHostController: NavHostController, startDestination: Str
 
             GameScreen(isServer = isServer, navController = navHostController, nombre = nombre, gameState = gameState, sensorEventListener = naveListener, modifier = modifier)
         }
-        composable(Screen.GameOver.ruta) {
-            GameOver()
+        composable(Screen.GameOver.ruta, arguments = listOf(
+            navArgument("isServer", { type = NavType.BoolType}),
+            navArgument("ganador", { type =  NavType.StringType })
+        )) { backStackEntry ->
+            val isServer = backStackEntry.arguments?.getBoolean("isServer") ?: false
+            val ganador = backStackEntry.arguments?.getString("ganador") ?: "Player"
+            GameOver(navHostController, isServer, ganador)
         }
     }
 }

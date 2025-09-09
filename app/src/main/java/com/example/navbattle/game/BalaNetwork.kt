@@ -6,5 +6,6 @@ data class BalaNetwork(
     val velX: Float,
     val velY: Float,
     val senderIsServer: Boolean,
-    val isTriple: Boolean = false
+    val isTriple: Boolean = false,
+    val tripleOffsets: List<Float>?
 )

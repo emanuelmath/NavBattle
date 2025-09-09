@@ -19,6 +19,10 @@ sealed class Screen(val ruta: String) {
         }
     }
 
-    object GameOver : Screen("gameover")
+    object GameOver : Screen("gameover/{isServer}/{ganador}") {
+        fun gameOverDelUsuario(isServer: Boolean, ganador: String): String {
+            return "gameover/$isServer/$ganador"
+        }
+    }
 
 }

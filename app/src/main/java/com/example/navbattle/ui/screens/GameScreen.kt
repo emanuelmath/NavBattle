@@ -151,34 +151,29 @@ fun GameScreen(
                             Log.e("GameScreen", "Error parseando BalaNetwork: ${e.message}")
                             null
                         }
-                        balaNet?.let {
-                            // DUAL! style: X igual, Y reflejado, velocidad Y invertida
-                            val posX = it.offsetX.coerceIn(0f, 1f)
-                            val posY = (1f - it.offsetY).coerceIn(0f, 1f)
-                            val velX = it.velX
-                            val velY = -it.velY
+                        balaNet?.let { bn ->
+                            val posX = bn.offsetX.coerceIn(0f, 1f)
+                            val posY = (1f - bn.offsetY).coerceIn(0f, 1f)
+                            val velX = bn.velX
+                            val velY = -bn.velY
 
-                            if (it.isTriple) {
-                                val tripleOffsets = listOf(-0.03f, 0f, 0.03f)
-                                tripleOffsets.forEach { dx ->
-                                    val balaRecibida = Bala(
-                                        position = Offset((posX + dx).coerceIn(0f, 1f), posY),
-                                        velocity = Offset(velX, velY),
-                                        isMine = false
-                                    )
-                                    Handler(Looper.getMainLooper()).post {
-                                        gameState.value = gameState.value.copy(bullets = gameState.value.bullets + balaRecibida)
-                                    }
+                            fun postAdd(b: Bala) {
+                                Handler(Looper.getMainLooper()).post {
+                                    gameState.value = gameState.value.copy(bullets = gameState.value.bullets + b)
+                                }
+                            }
+
+                            if (bn.isTriple) {
+                                val tripleOffsets = bn.tripleOffsets?.ifEmpty { listOf(-0.03f, 0f, 0.03f) }
+                                tripleOffsets?.forEach { dx ->
+                                    val dxMapped = if (bn.senderIsServer != isServer) -dx else dx
+                                    val xMapped = (posX + dxMapped).coerceIn(0f, 1f)
+                                    val balaRecibida = Bala(Offset(xMapped, posY), Offset(velX, velY), false)
+                                    postAdd(balaRecibida)
                                 }
                             } else {
-                                val balaRecibida = Bala(
-                                    position = Offset(posX, posY),
-                                    velocity = Offset(velX, velY),
-                                    isMine = false
-                                )
-                                Handler(Looper.getMainLooper()).post {
-                                    gameState.value = gameState.value.copy(bullets = gameState.value.bullets + balaRecibida)
-                                }
+                                val balaRecibida = Bala(Offset(posX, posY), Offset(velX, velY), false)
+                                postAdd(balaRecibida)
                             }
                         }
                     }
@@ -193,12 +188,18 @@ fun GameScreen(
                     }
 
                     "gameOver" -> {
-                        val ganador = mensaje.data
+                        val ganadorId = mensaje.data
                         Handler(Looper.getMainLooper()).post {
                             if (!gameState.value.isGameOver) {
-                                gameState.value = gameState.value.copy(isGameOver = true, winner = ganador)
+                                val winnerText = when (ganadorId) {
+                                    "server" -> if (isServer) nombre else gameState.value.enemy.name
+                                    "client" -> if (!isServer) nombre  else gameState.value.enemy.name
+                                    else -> ganadorId
+                                }
+                                gameState.value = gameState.value.copy(isGameOver = true, winner = winnerText)
                                 try {
-                                    navController.navigate(Screen.GameOver.ruta) {
+                                    val isServerWinner = gameState.value.player.lives > gameState.value.enemy.lives
+                                    navController.navigate(Screen.GameOver.gameOverDelUsuario(isServerWinner, winnerText)) {
                                         popUpTo(Screen.Juego.ruta) { inclusive = true }
                                     }
                                 } catch (e: Exception) {
@@ -253,7 +254,8 @@ fun GameScreen(
             val clampedPlayer = player.copy(position = Offset(bouncedX, bouncedY))
 
             val updatedBullets = state.bullets.map { it.copy(position = it.position + it.velocity) }
-            val bulletsInScreen = updatedBullets.filter { it.position.y in -0.1f..1.1f && it.position.x in -0.1f..1.1f }
+
+            val bulletsInScreen = updatedBullets.filter { it.position.y in -0.2f..1.2f && it.position.x in -0.2f..1.2f }
 
             val naveSize = Size(naveWidth, naveHeight)
             val balaSize = Size(0.035f, 0.045f)
@@ -283,14 +285,16 @@ fun GameScreen(
             if (!gameOverNotificado) {
                 if (updatedPlayer.lives <= 0) {
                     gameOverNotificado = true
-                    val mensajeGameOver = Mensaje("gameOver", "Enemy")
+                    val winnerId = if (isServer) "client" else "server"
+                    val mensajeGameOver = Mensaje("gameOver", winnerId)
                     scope.launch {
                         try { sendWithRetries(mensajeGameOver, retries = 3, delayMs = 250L) } catch (e: Exception) { Log.e("GameScreen", "Error en sendWithRetries: ${e.message}") }
                     }
                     withContext(Dispatchers.Main) {
                         try {
                             gameState.value = gameState.value.copy(isGameOver = true, winner = "Enemy")
-                            navController.navigate(Screen.GameOver.ruta) {
+                            val isServerWinner = gameState.value.player.lives > gameState.value.enemy.lives
+                            navController.navigate(Screen.GameOver.gameOverDelUsuario(isServerWinner, nombre)) {
                                 popUpTo(Screen.Juego.ruta) { inclusive = true }
                             }
                         } catch (e: Exception) {
@@ -300,10 +304,17 @@ fun GameScreen(
                     break
                 } else if (state.enemy.lives <= 0) {
                     gameOverNotificado = true
+                    val winnerId = if (isServer) "server" else "client"
+                    val mensajeGameOver = Mensaje("gameOver", winnerId)
+                    scope.launch {
+                        try { sendWithRetries(mensajeGameOver, retries = 3, delayMs = 250L) } catch (e: Exception) { Log.e("GameScreen", "Error en sendWithRetries (enemy<=0): ${e.message}") }
+                    }
                     withContext(Dispatchers.Main) {
                         try {
-                            gameState.value = gameState.value.copy(isGameOver = true, winner = "You")
-                            navController.navigate(Screen.GameOver.ruta) {
+                            gameState.value = gameState.value.copy(isGameOver = true, winner = nombre)
+                            val ganador = gameState.value.winner
+                            val isServerWinner = gameState.value.player.lives > gameState.value.enemy.lives
+                            navController.navigate(Screen.GameOver.gameOverDelUsuario(isServerWinner, ganador ?: "Player")) {
                                 popUpTo(Screen.Juego.ruta) { inclusive = true }
                             }
                         } catch (e: Exception) {
@@ -317,7 +328,6 @@ fun GameScreen(
             delay(16L) //60 fps.
         }
     }
-
 
     Box(
         modifier = modifier
@@ -337,18 +347,18 @@ fun GameScreen(
                         val tripleOffsets = listOf(-0.03f, 0f, 0.03f)
                         tripleOffsets.forEach { dx ->
                             val balaPos = Offset((player.position.x + dx).coerceIn(0f, 1f), player.position.y)
-                            val bala = Bala(balaPos, Offset(0f, -0.035f), true)
-                            balas.add(bala)
-                            val bn = BalaNetwork(
-                                offsetX = balaPos.x,
-                                offsetY = balaPos.y,
-                                velX = 0f,
-                                velY = -0.035f,
-                                senderIsServer = isServer,
-                                isTriple = true
-                            )
-                            safeSendMensaje(Mensaje("bala", Gson().toJson(bn)))
+                            balas.add(Bala(balaPos, Offset(0f, -0.035f), true))
                         }
+                        val bn = BalaNetwork(
+                            offsetX = balas[1].position.x,
+                            offsetY = balas[1].position.y,
+                            velX = 0f,
+                            velY = -0.035f,
+                            senderIsServer = isServer,
+                            isTriple = true,
+                            tripleOffsets = tripleOffsets
+                        )
+                        safeSendMensaje(Mensaje("bala", Gson().toJson(bn)))
                     } else {
                         val bala = Bala(player.position, Offset(0f, -0.035f), true)
                         balas.add(bala)
@@ -358,10 +368,12 @@ fun GameScreen(
                             velX = bala.velocity.x,
                             velY = bala.velocity.y,
                             senderIsServer = isServer,
-                            isTriple = false
+                            isTriple = false,
+                            tripleOffsets = listOf()
                         )
                         safeSendMensaje(Mensaje("bala", Gson().toJson(bn)))
                     }
+
 
                     gameState.value = state.copy(
                         bullets = state.bullets + balas,
@@ -432,6 +444,7 @@ fun GameScreen(
         )
     }
 }
+
 
 // Funciones de colisión.
 fun getNaveCollider(position: Offset, size: Size): Rect {

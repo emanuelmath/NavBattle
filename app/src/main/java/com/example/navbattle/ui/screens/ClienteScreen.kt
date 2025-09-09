@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +20,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,16 +47,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
 import com.example.navbattle.R
 import com.example.navbattle.bluetooth.BluetoothCliente
-import com.example.navbattle.bluetooth.Mensaje
 import com.example.navbattle.ui.navigation.Screen
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.UUID
 
 @Composable
 fun BuscarPartida(nombre: String?, navController: NavController) {
@@ -146,8 +143,11 @@ fun BuscarPartida(nombre: String?, navController: NavController) {
 
             Spacer(Modifier.size(10.dp))
 
-            devices.forEach { device ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val scrollState = rememberScrollState()
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.verticalScroll(scrollState)) {
+                    devices.forEach { device ->
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
@@ -193,30 +193,33 @@ fun BuscarPartida(nombre: String?, navController: NavController) {
                     }
                     Spacer(Modifier.size(15.dp))
                 }
-            }
+                    Spacer(modifier = Modifier.size(15.dp))
 
-            if (conectado) {
-                Text("¡Conectado! Esperando a que el servidor inicie la partida...",
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold)
-            }
-
-            Spacer(modifier = Modifier.size(15.dp))
-
-            Button(onClick = {
-                adapter?.bondedDevices?.forEach { device ->
-                    if (!devices.contains(device)) {
-                        devices.add(device)
+                    if (conectado) {
+                        Text("¡Conectado! Esperando a que el servidor inicie la partida...",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold)
                     }
-                }
-            },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF352DB6)
-                )) {
-                Text("Refrescar",
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold)
+
+                    Button(onClick = {
+                        adapter?.bondedDevices?.forEach { device ->
+                            if (!devices.contains(device)) {
+                                devices.add(device)
+                            }
+                        }
+                    },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF352DB6)
+                        )) {
+                        Text("Refrescar",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold)
+                    }
             }
+
+
+
+
         }
     }
 }
@@ -253,8 +256,10 @@ fun BuscarPartidaPreview(nombre: String?) {
 
             Spacer(Modifier.size(10.dp))
 
+            val scrollState = rememberScrollState()
             devices.forEach { device ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.verticalScroll(scrollState)) {
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
