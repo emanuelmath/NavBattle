@@ -12,6 +12,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,13 +32,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.example.navbattle.R
 import com.example.navbattle.bluetooth.BluetoothCliente
 import com.example.navbattle.bluetooth.Mensaje
 import com.example.navbattle.ui.navigation.Screen
@@ -115,60 +123,100 @@ fun BuscarPartida(nombre: String?, navController: NavController) {
     }
 
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(top = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("¡Hola ${nombre ?: "Player"}! Elige una partida:")
-        Spacer(Modifier.size(10.dp))
+    Scaffold(
+        containerColor = Color(0xFF738AF2)
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(top = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mando),
+                contentDescription = null,
+                modifier = Modifier.size(100.dp)
+            )
+            Text("¡Hola ${nombre ?: "Player"}! Elige una partida:",
+                color = Color.White,
+                fontSize = 25.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.ExtraBold)
 
-        devices.forEach { device ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(device.name ?: "Dispositivo desconocido")
-                    Spacer(Modifier.size(10.dp))
-                    Button(
-                        onClick = {
-                            elegido = true
-                            conectado = true
+            Spacer(Modifier.size(10.dp))
 
-                            BluetoothCliente.conectar(context, adapter, device, nombre ?: "Player") { mensaje ->
-                                if (mensaje.tipo == "iniciar") {
+            devices.forEach { device ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(device.name ?: "Dispositivo desconocido",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.ExtraBold)
 
-                                    Handler(Looper.getMainLooper()).post {
-                                        navController.navigate(Screen.Juego.juegoDelUsuario(nombre, false)) {
-                                            popUpTo(Screen.Cliente.ruta) { inclusive = true }
+                        Spacer(Modifier.size(10.dp))
+                        Button(
+                            onClick = {
+                                elegido = true
+                                conectado = true
+
+                                BluetoothCliente.conectar(
+                                    context,
+                                    adapter,
+                                    device,
+                                    nombre ?: "Player"
+                                ) { mensaje ->
+                                    if (mensaje.tipo == "iniciar") {
+                                        Handler(Looper.getMainLooper()).post {
+                                            navController.navigate(
+                                                Screen.Juego.juegoDelUsuario(nombre, false)
+                                            ) {
+                                                popUpTo(Screen.Cliente.ruta) { inclusive = true }
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        },
-                        enabled = !elegido
-                    ) {
-                        Text("Conectar")
+                            },
+                            enabled = !elegido,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFB8123F)
+                            )
+                        ) {
+                            Text("Conectar",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                    Spacer(Modifier.size(15.dp))
+                }
+            }
+
+            if (conectado) {
+                Text("¡Conectado! Esperando a que el servidor inicie la partida...",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold)
+            }
+
+            Spacer(modifier = Modifier.size(15.dp))
+
+            Button(onClick = {
+                adapter?.bondedDevices?.forEach { device ->
+                    if (!devices.contains(device)) {
+                        devices.add(device)
                     }
                 }
-                Spacer(Modifier.size(10.dp))
+            },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF352DB6)
+                )) {
+                Text("Refrescar",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold)
             }
-        }
-
-        if (conectado) {
-            Text("¡Conectado! Esperando a que el servidor inicie la partida...")
-        }
-
-        Spacer(modifier = Modifier.size(10.dp))
-
-        Button(onClick = {
-            adapter?.bondedDevices?.forEach { device ->
-                if (!devices.contains(device)) {
-                    devices.add(device)
-                }
-            }
-        } ) {
-            Text("Refrescar")
         }
     }
 }
@@ -186,42 +234,72 @@ fun BuscarPartidaPreview(nombre: String?) {
     var conectado = false
 
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(top=20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("¡Hola ${nombre ?: "Player"}! Elige una partida:")
-        Spacer(Modifier.size(10.dp))
+    Scaffold(containerColor = Color(0xFF738AF2)) {
+        innerPadding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(top=10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mando),
+                contentDescription = null,
+                modifier = Modifier.size(100.dp)
+            )
+            Text("¡Hola ${nombre ?: "Player"}! Elige una partida:",
+                color = Color.White,
+                fontSize = 25.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.ExtraBold)
 
-        devices.forEach { device ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(device.name)//?: "Dispositivo desconocido")
-                    Spacer(Modifier.size(10.dp))
-                    Button(
-                        onClick = {
-                            elegido = !elegido
-                            conectado = !conectado
-                        },
-                        enabled = !elegido
+            Spacer(Modifier.size(10.dp))
+
+            devices.forEach { device ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Conectar")
+                        Text(device.name,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold)
+                        //?: "Dispositivo desconocido")
+                        Spacer(Modifier.size(10.dp))
+                        Button(
+                            onClick = {
+                                elegido = !elegido
+                                conectado = !conectado
+                            },
+                            enabled = !elegido,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFB8123F)
+                            )
+                        ) {
+                            Text("Conectar",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold)
+                        }
                     }
+                    Spacer(Modifier.size(15.dp))
                 }
-                Spacer(Modifier.size(10.dp))
             }
-        }
 
-        if (conectado) {
-            Text("¡Conectado! Esperando a que el servidor inicie la partida...")
-        }
+            if (conectado) {
+                Text("¡Conectado! Esperando a que el servidor inicie la partida...")
+            }
 
-        Button(onClick = {
-        } ) {
-            Text("Refrescar")
+            Spacer(Modifier.size(15.dp))
+
+            Button(onClick = {
+            },
+                colors = ButtonDefaults.buttonColors(
+                    Color(0xFF352DB6)
+                )) {
+                Text("Refrescar",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold)
+            }
+
         }
 
     }

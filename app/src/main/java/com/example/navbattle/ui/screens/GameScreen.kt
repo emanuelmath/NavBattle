@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.hardware.Sensor
 import android.hardware.SensorManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
@@ -14,6 +13,7 @@ import android.util.Log
 import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,9 +35,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -49,13 +51,17 @@ import com.example.navbattle.bluetooth.BluetoothCliente
 import com.example.navbattle.bluetooth.BluetoothServidor
 import com.example.navbattle.bluetooth.Mensaje
 import com.example.navbattle.game.Bala
+import com.example.navbattle.game.BalaNetwork
 import com.example.navbattle.game.GameState
 import com.example.navbattle.game.Nave
 import com.example.navbattle.game.NaveAccelerometerListener
 import com.example.navbattle.ui.navigation.Screen
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 
@@ -73,6 +79,7 @@ fun GameScreen(
     val scope = rememberCoroutineScope()
     val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
     // Bloquear botón atrás.
     BackHandler { }
@@ -85,6 +92,9 @@ fun GameScreen(
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
+
+    val naveWidth = 0.1f
+    val naveHeight = 0.14f
 
     // Sprites naves.
     val naveServerSprites = listOf(
@@ -99,65 +109,115 @@ fun GameScreen(
         ImageBitmap.imageResource(R.drawable.naveclientevida2),
         ImageBitmap.imageResource(R.drawable.naveclientevida3)
     )
-
     // Sprites balas.
     val balaSprite = ImageBitmap.imageResource(R.drawable.bala)
     val balaSpriteDown = ImageBitmap.imageResource(R.drawable.balaabajo)
 
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    fun safeSendMensaje(mensaje: Mensaje) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (isServer) BluetoothServidor.enviarMensaje(mensaje) else BluetoothCliente.enviarMensaje(mensaje)
+            } catch (e: Exception) {
+                Log.e("GameScreen", "safeSendMensaje error: ${e.message}")
+            }
+        }
+    }
 
+    suspend fun sendWithRetries(mensaje: Mensaje, retries: Int = 3, delayMs: Long = 200L) {
+        repeat(retries) { attempt ->
+            try {
+                withContext(Dispatchers.IO) {
+                    if (isServer) BluetoothServidor.enviarMensaje(mensaje) else BluetoothCliente.enviarMensaje(mensaje)
+                }
+                return
+            } catch (e: Exception) {
+                Log.w("GameScreen", "sendWithRetries intento ${attempt + 1} falló: ${e.message}")
+                delay(delayMs)
+            }
+        }
+        Log.w("GameScreen", "sendWithRetries: todos los intentos fallaron.")
+    }
 
     // Escuchar mensajes bluetooth.
     LaunchedEffect(Unit) {
         val socket = if (isServer) BluetoothServidor.socketConectado else BluetoothCliente.socketConectado
-
         if (socket != null) {
             val escuchar: (Mensaje) -> Unit = { mensaje ->
                 when (mensaje.tipo) {
                     "bala" -> {
-                        val balaEnemiga = try {
-                            Gson().fromJson(mensaje.data, Bala::class.java)
+                        val balaNet = try {
+                            Gson().fromJson(mensaje.data, BalaNetwork::class.java)
                         } catch (e: Exception) {
-                            Log.e("GameScreen", "Error parseando bala: ${e.message}")
+                            Log.e("GameScreen", "Error parseando BalaNetwork: ${e.message}")
                             null
                         }
-                        balaEnemiga?.let {
-                            val mirrored = it.copy(
-                                position = Offset(it.position.x, 1f - it.position.y),
-                                velocity = Offset(it.velocity.x, -it.velocity.y),
-                                isMine = false
-                            )
+                        balaNet?.let {
+                            // DUAL! style: X igual, Y reflejado, velocidad Y invertida
+                            val posX = it.offsetX.coerceIn(0f, 1f)
+                            val posY = (1f - it.offsetY).coerceIn(0f, 1f)
+                            val velX = it.velX
+                            val velY = -it.velY
 
-                            gameState.value = gameState.value.copy(
-                                bullets = gameState.value.bullets + mirrored
-                            )
+                            if (it.isTriple) {
+                                val tripleOffsets = listOf(-0.03f, 0f, 0.03f)
+                                tripleOffsets.forEach { dx ->
+                                    val balaRecibida = Bala(
+                                        position = Offset((posX + dx).coerceIn(0f, 1f), posY),
+                                        velocity = Offset(velX, velY),
+                                        isMine = false
+                                    )
+                                    Handler(Looper.getMainLooper()).post {
+                                        gameState.value = gameState.value.copy(bullets = gameState.value.bullets + balaRecibida)
+                                    }
+                                }
+                            } else {
+                                val balaRecibida = Bala(
+                                    position = Offset(posX, posY),
+                                    velocity = Offset(velX, velY),
+                                    isMine = false
+                                )
+                                Handler(Looper.getMainLooper()).post {
+                                    gameState.value = gameState.value.copy(bullets = gameState.value.bullets + balaRecibida)
+                                }
+                            }
                         }
                     }
+
                     "hit" -> {
                         val vidas = mensaje.data.toIntOrNull()
-                        if (vidas == null) {
-                            Log.w("GameScreen", "hit recibido con data no válida: '${mensaje.data}'")
-                        } else {
-                            gameState.value = gameState.value.copy(
-                                enemy = gameState.value.enemy.copy(lives = vidas)
-                            )
+                        vidas?.let {
+                            Handler(Looper.getMainLooper()).post {
+                                gameState.value = gameState.value.copy(enemy = gameState.value.enemy.copy(lives = it))
+                            }
                         }
                     }
+
                     "gameOver" -> {
                         val ganador = mensaje.data
                         Handler(Looper.getMainLooper()).post {
-                            navController.navigate(Screen.GameOver.ruta) {
-                                popUpTo(Screen.Juego.ruta) { inclusive = true }
+                            if (!gameState.value.isGameOver) {
+                                gameState.value = gameState.value.copy(isGameOver = true, winner = ganador)
+                                try {
+                                    navController.navigate(Screen.GameOver.ruta) {
+                                        popUpTo(Screen.Juego.ruta) { inclusive = true }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("GameScreen", "Error navegando a GameOver al recibir: ${e.message}")
+                                }
                             }
                         }
                     }
                 }
             }
 
-            if (isServer) BluetoothServidor.escucharMensajes(socket, escuchar)
-            else BluetoothCliente.escucharMensajes(socket, escuchar)
+            try {
+                if (isServer) BluetoothServidor.escucharMensajes(socket, escuchar)
+                else BluetoothCliente.escucharMensajes(socket, escuchar)
+            } catch (e: Exception) {
+                Log.e("GameScreen", "Error iniciando escucha socket: ${e.message}")
+            }
         } else {
-            Log.w("GameScreen", "Socket aún no conectado al entrar a GameScreen")
+            Log.w("GameScreen", "Socket nulo en LaunchedEffect inicial.")
         }
     }
 
@@ -167,88 +227,140 @@ fun GameScreen(
     LaunchedEffect(Unit) {
         while (true) {
             val state = gameState.value
+
             val player = state.player
-            val clampedPlayer = player.copy(
-                position = player.position.copy(
-                    x = player.position.x.coerceIn(0f, 1f),
-                    y = player.position.y.coerceIn(0f, 1f)
-                )
-            )
+            val minX = naveWidth / 2f
+            val maxX = 1f - naveWidth / 2f
+            val minY = naveHeight / 2f
+            val maxY = 1f - naveHeight / 2f
+
+            fun applyBounce(coord: Float, min: Float, max: Float): Float {
+                return when {
+                    coord < min -> {
+                        val penetration = min - coord
+                        (min + penetration * 0.3f).coerceAtMost(max)
+                    }
+                    coord > max -> {
+                        val penetration = coord - max
+                        (max - penetration * 0.3f).coerceAtLeast(min)
+                    }
+                    else -> coord
+                }
+            }
+
+            val bouncedX = applyBounce(player.position.x, minX, maxX)
+            val bouncedY = applyBounce(player.position.y, minY, maxY)
+            val clampedPlayer = player.copy(position = Offset(bouncedX, bouncedY))
 
             val updatedBullets = state.bullets.map { it.copy(position = it.position + it.velocity) }
-            val bulletsInScreen = updatedBullets.filter { it.position.y in 0f..1f }
+            val bulletsInScreen = updatedBullets.filter { it.position.y in -0.1f..1.1f && it.position.x in -0.1f..1.1f }
 
-            val myPlayer = clampedPlayer
-            val naveSize = Size(0.08f, 0.12f)
-            val balaSize = Size(0.025f, 0.035f)
+            val naveSize = Size(naveWidth, naveHeight)
+            val balaSize = Size(0.035f, 0.045f)
 
             val survivingBullets = mutableListOf<Bala>()
             var hitDetected = false
 
             for (bala in bulletsInScreen) {
-                if (!bala.isMine && checkCollision(bala.position, balaSize, myPlayer.position, naveSize)) {
+                if (!bala.isMine && checkCollision(bala.position, balaSize, clampedPlayer.position, naveSize)) {
                     hitDetected = true
-                    vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+                    try { vibrator.vibrate(VibrationEffect.createOneShot(350, VibrationEffect.DEFAULT_AMPLITUDE)) } catch (_: Exception) {}
                 } else {
                     survivingBullets.add(bala)
                 }
             }
 
-            var updatedPlayer = myPlayer
+            var updatedPlayer = clampedPlayer
             if (hitDetected) {
-                val newLives = (myPlayer.lives - 1).coerceAtLeast(0)
-                updatedPlayer = myPlayer.copy(lives = newLives)
-
+                val newLives = (clampedPlayer.lives - 1).coerceAtLeast(0)
+                updatedPlayer = clampedPlayer.copy(lives = newLives)
                 val mensajeHit = Mensaje("hit", newLives.toString())
-                if (isServer) BluetoothServidor.enviarMensaje(mensajeHit)
-                else BluetoothCliente.enviarMensaje(mensajeHit)
+                safeSendMensaje(mensajeHit)
             }
 
-            gameState.value = state.copy(
-                player = updatedPlayer,
-                bullets = survivingBullets
-            )
+            gameState.value = state.copy(player = updatedPlayer, bullets = survivingBullets)
 
-
-            if (!gameOverNotificado && (clampedPlayer.lives <= 0 || state.enemy.lives <= 0)) {
-                gameOverNotificado = true
-                val ganador = if (clampedPlayer.lives > 0) nombre else "Enemy"
-                val mensajeGameOver = Mensaje("gameOver", ganador)
-                if (isServer) BluetoothServidor.enviarMensaje(mensajeGameOver)
-                else BluetoothCliente.enviarMensaje(mensajeGameOver)
-
-                navController.navigate(Screen.GameOver.ruta) {
-                    popUpTo(Screen.Juego.ruta) { inclusive = true }
+            if (!gameOverNotificado) {
+                if (updatedPlayer.lives <= 0) {
+                    gameOverNotificado = true
+                    val mensajeGameOver = Mensaje("gameOver", "Enemy")
+                    scope.launch {
+                        try { sendWithRetries(mensajeGameOver, retries = 3, delayMs = 250L) } catch (e: Exception) { Log.e("GameScreen", "Error en sendWithRetries: ${e.message}") }
+                    }
+                    withContext(Dispatchers.Main) {
+                        try {
+                            gameState.value = gameState.value.copy(isGameOver = true, winner = "Enemy")
+                            navController.navigate(Screen.GameOver.ruta) {
+                                popUpTo(Screen.Juego.ruta) { inclusive = true }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("GameScreen", "Error navegando a GameOver local: ${e.message}")
+                        }
+                    }
+                    break
+                } else if (state.enemy.lives <= 0) {
+                    gameOverNotificado = true
+                    withContext(Dispatchers.Main) {
+                        try {
+                            gameState.value = gameState.value.copy(isGameOver = true, winner = "You")
+                            navController.navigate(Screen.GameOver.ruta) {
+                                popUpTo(Screen.Juego.ruta) { inclusive = true }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("GameScreen", "Error navegando a GameOver (enemy<=0): ${e.message}")
+                        }
+                    }
+                    break
                 }
-                break
             }
 
             delay(16L) //60 fps.
         }
     }
 
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
             .pointerInteropFilter { event ->
                 if (event.action == MotionEvent.ACTION_DOWN) {
                     val now = System.currentTimeMillis()
                     val state = gameState.value
                     val player = state.player
 
-                    if (now - player.lastShotTime < 500 || player.bulletsAvailable <= 0) return@pointerInteropFilter true
+                    if (now - player.lastShotTime < 300 || player.bulletsAvailable <= 0) return@pointerInteropFilter true
 
                     val balas = mutableListOf<Bala>()
-                    val posNormalized = player.position
+                    val isTripleLocal = (player.bulletsAvailable == 1)
 
-                    if (player.bulletsAvailable == 1) {
-                        balas.add(Bala(posNormalized, Offset(0f, -0.025f), true))
-                        balas.add(Bala(posNormalized, Offset(-0.015f, -0.035f), true))
-                        balas.add(Bala(posNormalized, Offset(0.015f, -0.035f), true))
-
+                    if (isTripleLocal) {
+                        val tripleOffsets = listOf(-0.03f, 0f, 0.03f)
+                        tripleOffsets.forEach { dx ->
+                            val balaPos = Offset((player.position.x + dx).coerceIn(0f, 1f), player.position.y)
+                            val bala = Bala(balaPos, Offset(0f, -0.035f), true)
+                            balas.add(bala)
+                            val bn = BalaNetwork(
+                                offsetX = balaPos.x,
+                                offsetY = balaPos.y,
+                                velX = 0f,
+                                velY = -0.035f,
+                                senderIsServer = isServer,
+                                isTriple = true
+                            )
+                            safeSendMensaje(Mensaje("bala", Gson().toJson(bn)))
+                        }
                     } else {
-                        balas.add(Bala(posNormalized, Offset(0f, -0.05f), true))
+                        val bala = Bala(player.position, Offset(0f, -0.035f), true)
+                        balas.add(bala)
+                        val bn = BalaNetwork(
+                            offsetX = bala.position.x,
+                            offsetY = bala.position.y,
+                            velX = bala.velocity.x,
+                            velY = bala.velocity.y,
+                            senderIsServer = isServer,
+                            isTriple = false
+                        )
+                        safeSendMensaje(Mensaje("bala", Gson().toJson(bn)))
                     }
 
                     gameState.value = state.copy(
@@ -259,15 +371,9 @@ fun GameScreen(
                         )
                     )
 
-                    vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                    try { vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE)) } catch (_: Exception) {}
 
-                    balas.forEach { bala ->
-                        val mensaje = Mensaje("bala", Gson().toJson(bala))
-                        if (isServer) BluetoothServidor.enviarMensaje(mensaje)
-                        else BluetoothCliente.enviarMensaje(mensaje)
-                    }
-
-                    if (player.bulletsAvailable == 1) {
+                    if (isTripleLocal) {
                         scope.launch {
                             delay(1000)
                             val updatedPlayer = gameState.value.player.copy(bulletsAvailable = 3)
@@ -275,19 +381,24 @@ fun GameScreen(
                         }
                     }
 
-
-
                     true
                 } else false
             }
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.espaciofondo),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop
+        )
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val state = gameState.value
             val canvasSize = size
             fun Offset.toPx(): Offset = Offset(x * canvasSize.width, y * canvasSize.height)
-            val naveSize = Size(canvasSize.width * 0.12f, canvasSize.height * 0.16f)
-            val balaSize = Size(canvasSize.width * 0.035f, canvasSize.height * 0.05f)
 
+            val naveSizePx = Size(canvasSize.width * naveWidth, canvasSize.height * naveHeight)
+            val balaSizePx = Size(canvasSize.width * 0.035f, canvasSize.height * 0.05f)
 
             val playerPosPx = state.player.position.toPx()
             val playerSprite = if (isServer) {
@@ -295,30 +406,19 @@ fun GameScreen(
             } else {
                 naveClienteSprites.getOrElse(state.player.lives) { naveClienteSprites.first() }
             }
-
-            val centeredPlayerPos = playerPosPx - Offset(naveSize.width / 2f, naveSize.height / 2f)
+            val centeredPlayerPos = playerPosPx - Offset(naveSizePx.width / 2f, naveSizePx.height / 2f)
             drawImage(
                 playerSprite,
-                dstSize = IntSize(naveSize.width.roundToInt(), naveSize.height.roundToInt()),
+                dstSize = IntSize(naveSizePx.width.roundToInt(), naveSizePx.height.roundToInt()),
                 dstOffset = IntOffset(centeredPlayerPos.x.roundToInt(), centeredPlayerPos.y.roundToInt())
             )
 
             state.bullets.forEach { bala ->
-                val balaPx = bala.position.toPx() - Offset(balaSize.width / 2f, balaSize.height / 2f)
-
-                if (!bala.isMine && checkCollision(balaPx, balaSize, playerPosPx, naveSize)) {
-                    val newLives = (state.player.lives - 1).coerceAtLeast(0)
-                    gameState.value = state.copy(player = state.player.copy(lives = newLives))
-
-                    val mensajeHit = Mensaje("hit", newLives.toString())
-                    if (isServer) BluetoothServidor.enviarMensaje(mensajeHit)
-                    else BluetoothCliente.enviarMensaje(mensajeHit)
-                }
-
+                val balaPx = bala.position.toPx() - Offset(balaSizePx.width / 2f, balaSizePx.height / 2f)
                 val balaSpriteToUse = if (bala.isMine) balaSprite else balaSpriteDown
                 drawImage(
                     balaSpriteToUse,
-                    dstSize = IntSize(balaSize.width.roundToInt(), balaSize.height.roundToInt()),
+                    dstSize = IntSize(balaSizePx.width.roundToInt(), balaSizePx.height.roundToInt()),
                     dstOffset = IntOffset(balaPx.x.roundToInt(), balaPx.y.roundToInt())
                 )
             }
@@ -332,8 +432,6 @@ fun GameScreen(
         )
     }
 }
-
-
 
 // Funciones de colisión.
 fun getNaveCollider(position: Offset, size: Size): Rect {
@@ -394,6 +492,12 @@ fun GameScreenPreview(
     ) {
         val state = gameState
         Text("${state.player.bulletsAvailable}", color = Color.White, fontSize = 50.sp)
+        Image(
+            painter = painterResource(id = R.drawable.espaciofondo),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop
+        )
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
