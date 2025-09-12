@@ -11,6 +11,8 @@ Este proyecto es de carácter **universitario** y tiene como propósito **aprend
 - Comunicación cliente-servidor vía Bluetooth.
 - Diseño de un juego sencillo.
 
+![NavBattle - Diseño](https://github.com/user-attachments/assets/27f2c376-6549-450e-b334-d613cd519a75)
+
 ---
 
 ## 🎯 Objetivo
@@ -32,8 +34,8 @@ El objetivo es **derrotar al oponente** mediante disparos sincronizados entre di
 ---
 
 ## 🚀 Estado del proyecto
-⚠️ En desarrollo:  
-Todo el juego actualmente está en desarrollo, poco a poco se irán implementando todas sus partes para funcionar y primero Dios tener un juego sencillo, rápido, funcional y divertido. 
+🏁 Finalizado:  
+El proyecto ya fue entregado, pero eso no quita la posibilidad de seguirlo mejorando, corrigiendo y expandiendo. Primero Dios puedan ser pronto.
 Cualquier sugerencia o feedback es bienvenido. 🫂
 
 ---
